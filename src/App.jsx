@@ -1,28 +1,29 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Volume2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 /*
   ------------------------------------------------------------------
   Drumset Layout App
   ------------------------------------------------------------------
-  This version uses SAMPLE PLAYBACK instead of synthesized sounds.
+  Plain React version.
 
-  What changed:
-  - Each drum is mapped to an audio file in SAMPLE_LIBRARY
-  - Samples are decoded into AudioBuffers once
-  - Each hit creates a fresh AudioBufferSourceNode
-    -> this allows overlapping playback naturally
-  - Closed hi-hat chokes any ringing open hi-hat
-  - There is a hover-revealed master volume slider
-  - Pitch variation is hard-coded for a bit of humanization
+  No shadcn imports.
+  No path aliases.
+  Just:
+  - React
+  - framer-motion
+  - lucide-react
+  - Tailwind classes
 
-  Important setup note:
-  Put your sample files in /public/samples and make sure the filenames
-  below match what you actually have.
+  Audio features:
+  - sample playback
+  - overlapping hits
+  - open hi-hat choke group
+  - master volume
+  - small random pitch variation
+
+  Put your audio files in /public/samples.
   ------------------------------------------------------------------
 */
 
@@ -46,7 +47,7 @@ const DEFAULT_KEY_MAP = {
   kick: " ",
 };
 
-// Visual styles for the clickable drum pieces.
+// Shared visual styles for the round stage pieces.
 const DRUM_STYLE = {
   cymbal:
     "border-yellow-100/80 bg-[radial-gradient(circle_at_35%_35%,_rgba(255,255,255,0.95),_rgba(255,222,89,0.95)_30%,_rgba(222,180,46,0.95)_100%)] text-zinc-800",
@@ -54,12 +55,7 @@ const DRUM_STYLE = {
   tom: "border-zinc-300 bg-zinc-900 text-white",
 };
 
-// Sample configuration.
-// Update only these paths if you swap to your own files.
-// baseGain = per-drum default volume
-// pitchJitter = how strongly global pitch variation affects this drum
-// registerGroups = playback groups this sound should belong to
-// chokeGroups = playback groups that should be faded out before this drum plays
+// Audio file setup.
 const SAMPLE_LIBRARY = {
   kick: {
     path: "/samples/kick.wav",
@@ -115,7 +111,7 @@ const SAMPLE_LIBRARY = {
   },
 };
 
-// Circular stage pieces.
+// Circular pieces shown on the stage.
 const DRUMS = [
   {
     id: "crashLeft",
@@ -191,32 +187,37 @@ const DRUMS = [
   },
 ];
 
+// Everything that gets a row in the right-hand panel.
 const REMAP_ITEMS = [
   ...DRUMS.map(({ id, label }) => ({ id, label })),
   { id: "hiHatOpen", label: "Open Hi-Hat" },
   { id: "kick", label: '22" Bass Drum' },
 ];
 
-// Convert stored key values into friendly labels for the UI.
+// Shared button look for simple native buttons.
+const BUTTON_BASE =
+  "rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15";
+
+// Convert stored values into friendly labels.
 function getDisplayKey(value) {
   if (value === " ") return "Space";
   if (!value) return "Unassigned";
   return value.toUpperCase();
 }
 
-// Normalize browser key values so remapping stays consistent.
+// Normalize browser key values so bindings stay consistent.
 function normalizeKey(key) {
   if (key === " " || key === "Spacebar") return " ";
   if (key.length === 1) return key.toUpperCase();
   return key;
 }
 
-// Split labels across multiple lines inside the circular drum pieces.
+// Break labels into lines inside round pads.
 function splitLabel(label) {
   return label.split(" ");
 }
 
-// Keep numeric values inside a safe range.
+// Keep numbers in a safe range.
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -231,21 +232,21 @@ function loadSavedKeyMap() {
   }
 }
 
-// Promise wrapper around decodeAudioData for cleaner async code.
+// Wrap decodeAudioData in a promise.
 function decodeAudioData(ctx, arrayBuffer) {
   return new Promise((resolve, reject) => {
     ctx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
   });
 }
 
-// Add a little random pitch movement so repeated hits feel less robotic.
+// Add a little random pitch movement to repeated hits.
 function getPitchRate(baseRate = 1, globalVariation = 0, drumPitchJitter = 1) {
   const variationAmount = globalVariation * drumPitchJitter;
   const randomOffset = (Math.random() * 2 - 1) * variationAmount;
   return clamp(baseRate * (1 + randomOffset), 0.75, 1.25);
 }
 
-// Load samples once and provide a playDrum function for the rest of the app.
+// Load samples once and return a playDrum function.
 function useSampleDrumAudio({ masterVolume }) {
   const audioContextRef = useRef(null);
   const masterGainRef = useRef(null);
@@ -253,7 +254,7 @@ function useSampleDrumAudio({ masterVolume }) {
   const activeGroupsRef = useRef(new Map());
   const loadPromiseRef = useRef(null);
 
-  // Create the global audio graph once.
+  // Create the audio context and master gain once.
   const ensureAudioGraph = useCallback(() => {
     if (!audioContextRef.current) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -270,14 +271,14 @@ function useSampleDrumAudio({ masterVolume }) {
     return audioContextRef.current;
   }, [masterVolume]);
 
-  // Keep master volume in sync with the slider.
+  // Keep the master volume synced to the UI slider.
   useEffect(() => {
     if (masterGainRef.current && audioContextRef.current) {
       masterGainRef.current.gain.setValueAtTime(masterVolume, audioContextRef.current.currentTime);
     }
   }, [masterVolume]);
 
-  // Load and decode every configured sample once.
+  // Load and decode every sample file once.
   const loadAllSamples = useCallback(async () => {
     const ctx = ensureAudioGraph();
 
@@ -305,7 +306,6 @@ function useSampleDrumAudio({ masterVolume }) {
 
             sampleBuffersRef.current.set(drumId, decodedBuffer);
             loadedCount += 1;
-
             console.info(`[drums] Loaded sample: ${drumId}`);
           } catch {
             failedIds.push(drumId);
@@ -323,11 +323,12 @@ function useSampleDrumAudio({ masterVolume }) {
     return loadPromiseRef.current;
   }, [ensureAudioGraph]);
 
-  // Start loading on mount so the first hit is more likely to be ready.
+  // Start preloading as soon as the component mounts.
   useEffect(() => {
     void loadAllSamples();
   }, [loadAllSamples]);
 
+  // Stop every currently playing source in a named group.
   const stopGroup = useCallback((groupName, fadeOutSeconds = 0.04) => {
     const ctx = audioContextRef.current;
     if (!ctx) return;
@@ -347,13 +348,14 @@ function useSampleDrumAudio({ masterVolume }) {
       try {
         source.stop(now + fadeOutSeconds);
       } catch {
-        // Ignore stop errors if the source has already ended.
+        // Ignore if the source already ended.
       }
     });
 
     activeGroupsRef.current.delete(groupName);
   }, []);
 
+  // Track a source inside one or more playback groups.
   const registerSourceInGroups = useCallback((groupNames, entry) => {
     if (!groupNames?.length) return;
 
@@ -366,6 +368,7 @@ function useSampleDrumAudio({ masterVolume }) {
     });
   }, []);
 
+  // Remove a finished source from its playback groups.
   const unregisterSourceFromGroups = useCallback((groupNames, entry) => {
     if (!groupNames?.length) return;
 
@@ -380,14 +383,13 @@ function useSampleDrumAudio({ masterVolume }) {
     });
   }, []);
 
-  // Play one drum hit.
-  // Because we create a new source every time, repeated hits can overlap.
-  const playDrum = useCallback(
-    async (drumId) => {
-      const ctx = ensureAudioGraph();
-      const sample = SAMPLE_LIBRARY[drumId];
-      if (!sample) return;
+  // Play one drum sample.
+  function playDrumInternal(drumId) {
+    const ctx = ensureAudioGraph();
+    const sample = SAMPLE_LIBRARY[drumId];
+    if (!sample) return Promise.resolve();
 
+    return (async () => {
       if (ctx.state === "suspended") {
         await ctx.resume();
       }
@@ -397,7 +399,6 @@ function useSampleDrumAudio({ masterVolume }) {
       const buffer = sampleBuffersRef.current.get(drumId);
       if (!buffer || !masterGainRef.current) return;
 
-      // Example: a closed hi-hat stops any ringing open hi-hat.
       sample.chokeGroups?.forEach((groupName) => stopGroup(groupName));
 
       const source = ctx.createBufferSource();
@@ -418,14 +419,13 @@ function useSampleDrumAudio({ masterVolume }) {
       };
 
       source.start();
-    },
-    [ensureAudioGraph, loadAllSamples, registerSourceInGroups, stopGroup, unregisterSourceFromGroups],
-  );
+    })();
+  }
 
-  return { playDrum };
+  return { playDrum: playDrumInternal };
 }
 
-// Render one circular drum or cymbal on the main stage.
+// Render one circular cymbal or drum on the stage.
 function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
   const isCymbal = drum.kind === "cymbal";
   const isSnare = drum.kind === "snare";
@@ -433,7 +433,6 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
   return (
     <button
       type="button"
-      key={drum.id}
       onClick={() => onTrigger(drum.id)}
       aria-label={`${drum.label} (${getDisplayKey(keyMap[drum.id])})`}
       className={`absolute focus:outline-none ${isSnare ? "z-30" : "z-20"}`}
@@ -473,7 +472,7 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
   );
 }
 
-// Render the custom top-down bass drum shape.
+// Render the custom bass drum shape.
 function BassDrum({ isActive, keyMap, onTrigger }) {
   return (
     <button
@@ -504,7 +503,7 @@ function BassDrum({ isActive, keyMap, onTrigger }) {
   );
 }
 
-// Show a small hover/focus volume control in the top-right corner.
+// Render the small hover/focus master volume control.
 function VolumeHoverControl({ value, onChange }) {
   return (
     <div className="group absolute right-6 top-6 z-40">
@@ -537,7 +536,7 @@ function VolumeHoverControl({ value, onChange }) {
   );
 }
 
-// Render one simple control row: play, view key, and remap.
+// Render one simple row in the right-hand panel.
 function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
   return (
     <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 rounded-2xl border border-white/10 bg-black/20 p-3">
@@ -546,27 +545,40 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
         <div className="text-xs uppercase tracking-[0.2em] text-slate-300">{item.id}</div>
       </div>
 
-      <Button
-        variant="secondary"
-        className="rounded-xl"
+      <button
+        type="button"
+        className={BUTTON_BASE}
         onClick={() => onTrigger(item.id)}
       >
         Play
-      </Button>
+      </button>
 
-      <Input
+      <input
         readOnly
         value={getDisplayKey(value)}
-        className="w-24 border-white/10 bg-white/10 text-center text-white"
+        className="w-24 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center text-sm text-white outline-none"
       />
 
-      <Button
-        variant={isListening ? "default" : "secondary"}
-        className="rounded-xl"
+      <button
+        type="button"
+        className={`${BUTTON_BASE} ${isListening ? "bg-white/20" : ""}`}
         onClick={() => onStartRemap(item.id)}
       >
         {isListening ? "Listening..." : "Remap"}
-      </Button>
+      </button>
+    </div>
+  );
+}
+
+// Simple wrapper for the big panels.
+function Panel({ title, subtitle, children }) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
+      <div className="p-6 pb-0">
+        <h2 className="text-2xl font-semibold text-white">{title}</h2>
+        {subtitle ? <p className="mt-2 text-sm text-slate-200">{subtitle}</p> : null}
+      </div>
+      <div className="p-6">{children}</div>
     </div>
   );
 }
@@ -578,18 +590,15 @@ export default function DrumsetLayoutApp() {
   const [listeningFor, setListeningFor] = useState(null);
   const [masterVolume, setMasterVolume] = useState(DEFAULT_MASTER_VOLUME);
 
-  const { playDrum } = useSampleDrumAudio({
-    masterVolume,
-  });
-
+  const { playDrum } = useSampleDrumAudio({ masterVolume });
   const activeTimersRef = useRef({});
 
-  // Persist remapped keys.
+  // Save remapped keys.
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(keyMap));
   }, [keyMap]);
 
-  // Reverse lookup: key -> drum id.
+  // Build a lookup from key -> drum id.
   const keyToDrumMap = useMemo(() => {
     const map = new Map();
 
@@ -600,7 +609,7 @@ export default function DrumsetLayoutApp() {
     return map;
   }, [keyMap]);
 
-  // Play a drum and briefly flash the UI piece.
+  // Play one drum and briefly flash its UI state.
   const triggerDrum = useCallback(
     (drumId) => {
       void playDrum(drumId);
@@ -624,8 +633,7 @@ export default function DrumsetLayoutApp() {
     [playDrum],
   );
 
-  // We listen to keydown, not keypress.
-  // Repeated keydown events are ignored so a held key does not spam hits.
+  // Handle playing keys and remapping keys.
   useEffect(() => {
     const handleKeyDown = (event) => {
       const pressedKey = normalizeKey(event.key);
@@ -671,20 +679,22 @@ export default function DrumsetLayoutApp() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [keyToDrumMap, listeningFor, triggerDrum]);
 
-  const resetDefaults = () => {
+  // Restore the original keyboard mapping.
+  function resetDefaults() {
     setKeyMap(DEFAULT_KEY_MAP);
     setListeningFor(null);
-  };
+  }
 
-  const clearAllMappings = () => {
+  // Remove every mapping.
+  function clearAllMappings() {
     setKeyMap(Object.fromEntries(Object.keys(DEFAULT_KEY_MAP).map((key) => [key, ""])));
     setListeningFor(null);
-  };
+  }
 
   const listeningLabel = REMAP_ITEMS.find((item) => item.id === listeningFor)?.label || "Bass Drum";
 
-  // The stage has one visible hi-hat circle.
-  // It lights up for either the closed or open hi-hat hit.
+  // There is one visible hi-hat on the stage.
+  // Light it up for both closed and open hi-hat hits.
   const stageActiveDrums = {
     ...activeDrums,
     hiHatClosed: Boolean(activeDrums.hiHatClosed || activeDrums.hiHatOpen),
@@ -693,74 +703,76 @@ export default function DrumsetLayoutApp() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800 p-6 text-white">
       <VolumeHoverControl value={masterVolume} onChange={setMasterVolume} />
+
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-        <Card className="overflow-hidden rounded-3xl border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-2xl">Interactive Drumset Layout</CardTitle>
-            <p className="text-sm text-slate-200">
+        <Panel
+          title="Interactive Drumset Layout"
+          subtitle={
+            <>
               Click any piece or use your keyboard. Choose <span className="font-semibold text-white">Remap</span> to assign a new key, then press the key you want.
-            </p>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="relative mx-auto aspect-[4/3] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.14),_rgba(255,255,255,0.03)_45%,_rgba(0,0,0,0.12)_100%)]">
-              <div className="absolute inset-0">
-                {DRUMS.map((drum) => (
-                  <DrumPiece
-                    key={drum.id}
-                    drum={drum}
-                    isActive={Boolean(stageActiveDrums[drum.id])}
-                    keyMap={keyMap}
-                    onTrigger={triggerDrum}
-                  />
-                ))}
-
-                <BassDrum
-                  isActive={Boolean(activeDrums.kick)}
+            </>
+          }
+        >
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.14),_rgba(255,255,255,0.03)_45%,_rgba(0,0,0,0.12)_100%)]">
+            <div className="absolute inset-0">
+              {DRUMS.map((drum) => (
+                <DrumPiece
+                  key={drum.id}
+                  drum={drum}
+                  isActive={Boolean(stageActiveDrums[drum.id])}
                   keyMap={keyMap}
-                  onTrigger={triggerDrum}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-
-          <Card className="rounded-3xl border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-2xl">Key Mapping</CardTitle>
-              <p className="text-sm text-slate-200">
-                {listeningFor
-                  ? `Press a key for ${listeningLabel}. Press Escape to cancel.`
-                  : "Mappings save in your browser automatically."}
-              </p>
-            </CardHeader>
-
-            <CardContent className="space-y-3">
-              {REMAP_ITEMS.map((item) => (
-                <KeyMapRow
-                  key={item.id}
-                  item={item}
-                  value={keyMap[item.id]}
-                  isListening={listeningFor === item.id}
-                  onStartRemap={setListeningFor}
                   onTrigger={triggerDrum}
                 />
               ))}
 
-              <div className="flex gap-2 pt-2">
-                <Button className="rounded-xl" onClick={resetDefaults}>
-                  Reset Defaults
-                </Button>
+              <BassDrum
+                isActive={Boolean(activeDrums.kick)}
+                keyMap={keyMap}
+                onTrigger={triggerDrum}
+              />
+            </div>
+          </div>
+        </Panel>
 
-                <Button variant="secondary" className="rounded-xl" onClick={clearAllMappings}>
-                  Clear All
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Panel
+          title="Key Mapping"
+          subtitle={
+            listeningFor
+              ? `Press a key for ${listeningLabel}. Press Escape to cancel.`
+              : "Mappings save in your browser automatically."
+          }
+        >
+          <div className="space-y-3">
+            {REMAP_ITEMS.map((item) => (
+              <KeyMapRow
+                key={item.id}
+                item={item}
+                value={keyMap[item.id]}
+                isListening={listeningFor === item.id}
+                onStartRemap={setListeningFor}
+                onTrigger={triggerDrum}
+              />
+            ))}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                className={BUTTON_BASE}
+                onClick={resetDefaults}
+              >
+                Reset Defaults
+              </button>
+
+              <button
+                type="button"
+                className={BUTTON_BASE}
+                onClick={clearAllMappings}
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        </Panel>
       </div>
     </div>
   );
