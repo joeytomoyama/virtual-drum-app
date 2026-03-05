@@ -492,6 +492,7 @@ function BassDrum({ isActive, keyMap, onTrigger }) {
         transition={{ duration: 0.08 }}
         className="relative flex h-full w-full items-center justify-center"
       >
+		<div className="absolute w-[92%] h-[140%] bottom-[50%] rounded-t-[40px] border-2 bg-black" />
         <div className="absolute left-[4%] top-[18%] h-[64%] w-[92%] rounded-[999px] border-2 border-zinc-300 bg-zinc-700 shadow-2xl" />
 
         <div className="relative z-10 text-center text-[clamp(12px,1.4vw,16px)] font-medium text-zinc-200">
