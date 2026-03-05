@@ -57,60 +57,65 @@ const DRUM_STYLE = {
 };
 
 // Audio file setup.
-const SAMPLE_LIBRARY = {
-  kick: {
-    path: "/samples/kick.wav",
-    baseGain: 1,
-    pitchJitter: 0.4,
-  },
-  snare: {
-    path: "/samples/snare.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.55,
-  },
-  hiHatClosed: {
-    path: "/samples/hihat-closed.wav",
-    baseGain: 0.82,
-    pitchJitter: 0.45,
-    chokeGroups: [HI_HAT_OPEN_GROUP],
-  },
-  hiHatOpen: {
-    path: "/samples/hihat-open.wav",
-    baseGain: 0.82,
-    pitchJitter: 0.45,
-    registerGroups: [HI_HAT_OPEN_GROUP],
-  },
-  crashLeft: {
-    path: "/samples/crash-left.wav",
-    baseGain: 0.9,
-    pitchJitter: 0.18,
-  },
-  crashTop: {
-    path: "/samples/crash-top.wav",
-    baseGain: 0.9,
-    pitchJitter: 0.18,
-  },
-  ride: {
-    path: "/samples/ride.wav",
-    baseGain: 0.88,
-    pitchJitter: 0.12,
-  },
-  rackTomLeft: {
-    path: "/samples/tom-high.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.4,
-  },
-  rackTomRight: {
-    path: "/samples/tom-mid.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.4,
-  },
-  floorTom: {
-    path: "/samples/tom-floor.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.35,
-  },
+const getSampleLibrary = () => {
+  const basePath = `${import.meta.env.BASE_URL}samples/`;
+  return {
+    kick: {
+      path: `${basePath}kick.wav`,
+      baseGain: 1,
+      pitchJitter: 0.4,
+    },
+    snare: {
+      path: `${basePath}snare.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.55,
+    },
+    hiHatClosed: {
+      path: `${basePath}hihat-closed.wav`,
+      baseGain: 0.82,
+      pitchJitter: 0.45,
+      chokeGroups: [HI_HAT_OPEN_GROUP],
+    },
+    hiHatOpen: {
+      path: `${basePath}hihat-open.wav`,
+      baseGain: 0.82,
+      pitchJitter: 0.45,
+      registerGroups: [HI_HAT_OPEN_GROUP],
+    },
+    crashLeft: {
+      path: `${basePath}crash-left.wav`,
+      baseGain: 0.9,
+      pitchJitter: 0.18,
+    },
+    crashTop: {
+      path: `${basePath}crash-top.wav`,
+      baseGain: 0.9,
+      pitchJitter: 0.18,
+    },
+    ride: {
+      path: `${basePath}ride.wav`,
+      baseGain: 0.88,
+      pitchJitter: 0.12,
+    },
+    rackTomLeft: {
+      path: `${basePath}tom-high.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.4,
+    },
+    rackTomRight: {
+      path: `${basePath}tom-mid.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.4,
+    },
+    floorTom: {
+      path: `${basePath}tom-floor.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.35,
+    },
+  };
 };
+
+const SAMPLE_LIBRARY = getSampleLibrary();
 
 // Circular pieces shown on the stage.
 const DRUMS = [
