@@ -656,7 +656,7 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
 // Simple wrapper for the big panels.
 function Panel({ title, subtitle, children }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
+    <div className="rounded-3xl border border-transparent bg-transparent shadow-none backdrop-blur-0">
       <div className="p-6 pb-0">
         <h2 className="text-2xl font-semibold text-white">{title}</h2>
         {subtitle ? <p className="mt-2 text-sm text-slate-200">{subtitle}</p> : null}
@@ -796,7 +796,7 @@ export default function DrumsetLayoutApp() {
             </>
           }
         >
-          <div className="relative mx-auto aspect-[4/3] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.14),_rgba(255,255,255,0.03)_45%,_rgba(0,0,0,0.12)_100%)]">
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-black/20">
             <div className="absolute inset-0">
               {DRUMS.map((drum) => (
                 <DrumPiece
