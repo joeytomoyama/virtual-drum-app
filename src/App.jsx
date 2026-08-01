@@ -57,60 +57,65 @@ const DRUM_STYLE = {
 };
 
 // Audio file setup.
-const SAMPLE_LIBRARY = {
-  kick: {
-    path: "/samples/kick.wav",
-    baseGain: 1,
-    pitchJitter: 0.4,
-  },
-  snare: {
-    path: "/samples/snare.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.55,
-  },
-  hiHatClosed: {
-    path: "/samples/hihat-closed.wav",
-    baseGain: 0.82,
-    pitchJitter: 0.45,
-    chokeGroups: [HI_HAT_OPEN_GROUP],
-  },
-  hiHatOpen: {
-    path: "/samples/hihat-open.wav",
-    baseGain: 0.82,
-    pitchJitter: 0.45,
-    registerGroups: [HI_HAT_OPEN_GROUP],
-  },
-  crashLeft: {
-    path: "/samples/crash-left.wav",
-    baseGain: 0.9,
-    pitchJitter: 0.18,
-  },
-  crashTop: {
-    path: "/samples/crash-top.wav",
-    baseGain: 0.9,
-    pitchJitter: 0.18,
-  },
-  ride: {
-    path: "/samples/ride.wav",
-    baseGain: 0.88,
-    pitchJitter: 0.12,
-  },
-  rackTomLeft: {
-    path: "/samples/tom-high.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.4,
-  },
-  rackTomRight: {
-    path: "/samples/tom-mid.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.4,
-  },
-  floorTom: {
-    path: "/samples/tom-floor.wav",
-    baseGain: 0.95,
-    pitchJitter: 0.35,
-  },
+const getSampleLibrary = () => {
+  const basePath = `${import.meta.env.BASE_URL}samples/`;
+  return {
+    kick: {
+      path: `${basePath}kick.wav`,
+      baseGain: 1,
+      pitchJitter: 0.4,
+    },
+    snare: {
+      path: `${basePath}snare.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.55,
+    },
+    hiHatClosed: {
+      path: `${basePath}hihat-closed.wav`,
+      baseGain: 0.82,
+      pitchJitter: 0.45,
+      chokeGroups: [HI_HAT_OPEN_GROUP],
+    },
+    hiHatOpen: {
+      path: `${basePath}hihat-open.wav`,
+      baseGain: 0.82,
+      pitchJitter: 0.45,
+      registerGroups: [HI_HAT_OPEN_GROUP],
+    },
+    crashLeft: {
+      path: `${basePath}crash-left.wav`,
+      baseGain: 0.9,
+      pitchJitter: 0.18,
+    },
+    crashTop: {
+      path: `${basePath}crash-top.wav`,
+      baseGain: 0.9,
+      pitchJitter: 0.18,
+    },
+    ride: {
+      path: `${basePath}ride.wav`,
+      baseGain: 0.88,
+      pitchJitter: 0.12,
+    },
+    rackTomLeft: {
+      path: `${basePath}tom-high.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.4,
+    },
+    rackTomRight: {
+      path: `${basePath}tom-mid.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.4,
+    },
+    floorTom: {
+      path: `${basePath}tom-floor.wav`,
+      baseGain: 0.95,
+      pitchJitter: 0.35,
+    },
+  };
 };
+
+const SAMPLE_LIBRARY = getSampleLibrary();
 
 // Circular pieces shown on the stage.
 const DRUMS = [
@@ -221,6 +226,51 @@ function splitLabel(label) {
 // Keep numbers in a safe range.
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+// Scale text based on the rendered size of a drum element.
+function useResponsiveDrumText({
+  labelMin,
+  labelFactor,
+  labelMax,
+  keyMin,
+  keyFactor,
+  keyMax,
+}) {
+  const containerRef = useRef(null);
+  const [fontSizes, setFontSizes] = useState({
+    label: labelMin,
+    key: keyMin,
+  });
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return undefined;
+
+    const updateFontSizes = () => {
+      const diameter = Math.min(element.clientWidth, element.clientHeight);
+      if (!diameter) return;
+
+      setFontSizes({
+        label: clamp(diameter * labelFactor, labelMin, labelMax),
+        key: clamp(diameter * keyFactor, keyMin, keyMax),
+      });
+    };
+
+    updateFontSizes();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateFontSizes);
+      return () => window.removeEventListener("resize", updateFontSizes);
+    }
+
+    const observer = new ResizeObserver(updateFontSizes);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [keyFactor, keyMax, keyMin, labelFactor, labelMax, labelMin]);
+
+  return { containerRef, fontSizes };
 }
 
 // Read saved key mappings from localStorage.
@@ -430,9 +480,18 @@ function useSampleDrumAudio({ masterVolume }) {
 function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
   const isCymbal = drum.kind === "cymbal";
   const isSnare = drum.kind === "snare";
+  const { containerRef, fontSizes } = useResponsiveDrumText({
+    labelMin: 9,
+    labelFactor: 0.16,
+    labelMax: 24,
+    keyMin: 8,
+    keyFactor: 0.085,
+    keyMax: 14,
+  });
 
   return (
     <button
+      ref={containerRef}
       type="button"
       onClick={() => onTrigger(drum.id)}
       aria-label={`${drum.label} (${getDisplayKey(keyMap[drum.id])})`}
@@ -456,7 +515,10 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
         ].join(" ")}
       >
         <div className="px-2 leading-tight">
-          <div className="text-[clamp(11px,1.4vw,18px)] font-medium">
+          <div
+            className="font-medium"
+            style={{ fontSize: `${fontSizes.label}px` }}
+          >
             {splitLabel(drum.label).map((word, index, allWords) => (
               <React.Fragment key={`${drum.id}-${word}-${index}`}>
                 {word}
@@ -464,7 +526,10 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
               </React.Fragment>
             ))}
           </div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.24em] opacity-75">
+          <div
+            className="mt-1 uppercase tracking-[0.24em] opacity-75"
+            style={{ fontSize: `${fontSizes.key}px` }}
+          >
             {getDisplayKey(keyMap[drum.id])}
           </div>
         </div>
@@ -475,8 +540,18 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
 
 // Render the custom bass drum shape.
 function BassDrum({ isActive, keyMap, onTrigger }) {
+  const { containerRef, fontSizes } = useResponsiveDrumText({
+    labelMin: 10,
+    labelFactor: 0.12,
+    labelMax: 20,
+    keyMin: 9,
+    keyFactor: 0.065,
+    keyMax: 14,
+  });
+
   return (
     <button
+      ref={containerRef}
       type="button"
       aria-label={`22 inch Bass Drum (${getDisplayKey(keyMap.kick)})`}
       onClick={() => onTrigger("kick")}
@@ -487,14 +562,21 @@ function BassDrum({ isActive, keyMap, onTrigger }) {
         transition={{ duration: 0.08 }}
         className="relative flex h-full w-full items-center justify-center"
       >
+		<div className="absolute w-[92%] h-[140%] bottom-[50%] rounded-t-[40px] border-2 bg-black" />
         <div className="absolute left-[4%] top-[18%] h-[64%] w-[92%] rounded-[999px] border-2 border-zinc-300 bg-zinc-700 shadow-2xl" />
 
-        <div className="relative z-10 text-center text-[clamp(12px,1.4vw,16px)] font-medium text-zinc-200">
+        <div
+          className="relative z-10 text-center font-medium text-zinc-200"
+          style={{ fontSize: `${fontSizes.label}px` }}
+        >
           <div>
             22&quot; Bass
             <br />
             Drum
-            <div className="mt-1 text-[11px] uppercase tracking-[0.2em] text-zinc-400">
+            <div
+              className="mt-1 uppercase tracking-[0.2em] text-zinc-400"
+              style={{ fontSize: `${fontSizes.key}px` }}
+            >
               {getDisplayKey(keyMap.kick)}
             </div>
           </div>
@@ -540,7 +622,7 @@ function VolumeHoverControl({ value, onChange }) {
 // Render one simple row in the right-hand panel.
 function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className="grid grid-cols-1 items-center gap-2 rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
       <div>
         <div className="font-medium text-white">{item.label}</div>
         <div className="text-xs uppercase tracking-[0.2em] text-slate-300">{item.id}</div>
@@ -548,7 +630,7 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
 
       <button
         type="button"
-        className={BUTTON_BASE}
+        className={`${BUTTON_BASE} w-full sm:w-auto`}
         onClick={() => onTrigger(item.id)}
       >
         Play
@@ -557,12 +639,12 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
       <input
         readOnly
         value={getDisplayKey(value)}
-        className="w-24 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center text-sm text-white outline-none"
+        className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-center text-sm text-white outline-none sm:w-24"
       />
 
       <button
         type="button"
-        className={`${BUTTON_BASE} ${isListening ? "bg-white/20" : ""}`}
+        className={`${BUTTON_BASE} w-full sm:w-auto ${isListening ? "bg-white/20" : ""}`}
         onClick={() => onStartRemap(item.id)}
       >
         {isListening ? "Listening..." : "Remap"}
@@ -702,7 +784,7 @@ export default function DrumsetLayoutApp() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800 p-6 text-white">
+    <div className="relative min-h-dvh w-full overflow-x-hidden bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800 p-4 text-white sm:p-6">
       <VolumeHoverControl value={masterVolume} onChange={setMasterVolume} />
 
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.3fr_0.7fr]">
