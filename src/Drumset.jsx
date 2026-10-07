@@ -2,6 +2,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Volume2 } from "lucide-react";
+import {
+  STORAGE_KEY, DEFAULT_KEY_MAP, getDisplayKey, normalizeKey, remapKey,
+} from './keyBindings.js';
 
 /*
   ------------------------------------------------------------------
@@ -28,25 +31,10 @@ import { Volume2 } from "lucide-react";
   ------------------------------------------------------------------
 */
 
-const STORAGE_KEY = "drum-key-map-v1";
 const ACTIVE_FLASH_MS = 140;
 const DEFAULT_MASTER_VOLUME = 0.85;
 const HARD_CODED_PITCH_VARIATION = 0.03;
 const HI_HAT_OPEN_GROUP = "open-hi-hat";
-
-// Default keyboard bindings.
-const DEFAULT_KEY_MAP = {
-  crashLeft: "Q",
-  crashTop: "W",
-  ride: "E",
-  hiHatClosed: "A",
-  hiHatOpen: "Z",
-  snare: "S",
-  rackTomLeft: "D",
-  rackTomRight: "F",
-  floorTom: "G",
-  kick: " ",
-};
 
 // Shared visual styles for the round stage pieces.
 const DRUM_STYLE = {
@@ -204,20 +192,6 @@ const REMAP_ITEMS = [
 const BUTTON_BASE =
   "rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15";
 
-// Convert stored values into friendly labels.
-function getDisplayKey(value) {
-  if (value === " ") return "Space";
-  if (!value) return "Unassigned";
-  return value.toUpperCase();
-}
-
-// Normalize browser key values so bindings stay consistent.
-function normalizeKey(key) {
-  if (key === " " || key === "Spacebar") return " ";
-  if (key.length === 1) return key.toUpperCase();
-  return key;
-}
-
 // Break labels into lines inside round pads.
 function splitLabel(label) {
   return label.split(" ");
@@ -271,16 +245,6 @@ function useResponsiveDrumText({
   }, [keyFactor, keyMax, keyMin, labelFactor, labelMax, labelMin]);
 
   return { containerRef, fontSizes };
-}
-
-// Read saved key mappings from localStorage.
-function loadSavedKeyMap() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? { ...DEFAULT_KEY_MAP, ...JSON.parse(saved) } : DEFAULT_KEY_MAP;
-  } catch {
-    return DEFAULT_KEY_MAP;
-  }
 }
 
 // Wrap decodeAudioData in a promise.
@@ -493,7 +457,7 @@ function DrumPiece({ drum, isActive, keyMap, onTrigger }) {
     <button
       ref={containerRef}
       type="button"
-      onClick={() => onTrigger(drum.id)}
+      onClick={(event) => onTrigger(drum.id, event.timeStamp)}
       aria-label={`${drum.label} (${getDisplayKey(keyMap[drum.id])})`}
       className={`absolute focus:outline-none ${isSnare ? "z-30" : "z-20"}`}
       style={{
@@ -554,7 +518,7 @@ function BassDrum({ isActive, keyMap, onTrigger }) {
       ref={containerRef}
       type="button"
       aria-label={`22 inch Bass Drum (${getDisplayKey(keyMap.kick)})`}
-      onClick={() => onTrigger("kick")}
+      onClick={(event) => onTrigger("kick", event.timeStamp)}
       className="absolute left-[46%] top-[63%] z-10 h-[22%] w-[34%] -translate-x-1/2 -translate-y-1/2 focus:outline-none"
     >
       <motion.div
@@ -631,7 +595,7 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
       <button
         type="button"
         className={`${BUTTON_BASE} w-full sm:w-auto`}
-        onClick={() => onTrigger(item.id)}
+        onClick={(event) => onTrigger(item.id, event.timeStamp)}
       >
         Play
       </button>
@@ -645,6 +609,7 @@ function KeyMapRow({ item, value, isListening, onStartRemap, onTrigger }) {
       <button
         type="button"
         className={`${BUTTON_BASE} w-full sm:w-auto ${isListening ? "bg-white/20" : ""}`}
+        aria-label={`Remap ${item.label}`}
         onClick={() => onStartRemap(item.id)}
       >
         {isListening ? "Listening..." : "Remap"}
@@ -667,10 +632,8 @@ function Panel({ title, subtitle, children }) {
 }
 
 // Main app component.
-export default function DrumsetLayoutApp() {
-  const [keyMap, setKeyMap] = useState(loadSavedKeyMap);
+export default function DrumsetLayoutApp({ keyMap, setKeyMap, listeningFor, setListeningFor, onDrumHit, pausePractice }) {
   const [activeDrums, setActiveDrums] = useState({});
-  const [listeningFor, setListeningFor] = useState(null);
   const [masterVolume, setMasterVolume] = useState(DEFAULT_MASTER_VOLUME);
 
   const { playDrum } = useSampleDrumAudio({ masterVolume });
@@ -678,7 +641,7 @@ export default function DrumsetLayoutApp() {
 
   // Save remapped keys.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(keyMap));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(keyMap)); } catch { /* Storage may be disabled. */ }
   }, [keyMap]);
 
   // Build a lookup from key -> drum id.
@@ -694,7 +657,10 @@ export default function DrumsetLayoutApp() {
 
   // Play one drum and briefly flash its UI state.
   const triggerDrum = useCallback(
-    (drumId) => {
+    (drumId, timestamp = performance.now()) => {
+      const now = performance.now();
+      const at = timestamp > now + 1000 ? timestamp - performance.timeOrigin : timestamp;
+      onDrumHit(drumId, Math.min(now, at));
       void playDrum(drumId);
 
       setActiveDrums((previous) => ({
@@ -713,20 +679,23 @@ export default function DrumsetLayoutApp() {
         }));
       }, ACTIVE_FLASH_MS);
     },
-    [playDrum],
+    [playDrum, onDrumHit],
   );
 
   // Handle playing keys and remapping keys.
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const pressedKey = normalizeKey(event.key);
 
       if (event.repeat) {
-        event.preventDefault();
+        if (keyToDrumMap.has(pressedKey) && event.target instanceof HTMLElement &&
+          !event.target.closest('input, select, textarea, button, [contenteditable="true"]')) event.preventDefault();
         return;
       }
 
       if (listeningFor) {
+        if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab'].includes(pressedKey)) return;
         event.preventDefault();
 
         if (pressedKey === "Escape") {
@@ -734,42 +703,42 @@ export default function DrumsetLayoutApp() {
           return;
         }
 
-        setKeyMap((previous) => {
-          const next = { ...previous };
-
-          Object.keys(next).forEach((drumId) => {
-            if (next[drumId] === pressedKey) {
-              next[drumId] = "";
-            }
-          });
-
-          next[listeningFor] = pressedKey;
-          return next;
-        });
+        setKeyMap((previous) => remapKey(previous, listeningFor, pressedKey));
 
         setListeningFor(null);
         return;
       }
 
+      // Let text fields, selectors, and keyboard button activation work normally.
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.closest('input, select, textarea, [contenteditable="true"]') ||
+        (target.closest('button') && [' ', 'Enter'].includes(event.key)))) return;
+
       const drumId = keyToDrumMap.get(pressedKey);
       if (!drumId) return;
 
       event.preventDefault();
-      triggerDrum(drumId);
+      triggerDrum(drumId, event.timeStamp);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [keyToDrumMap, listeningFor, triggerDrum]);
+  }, [keyToDrumMap, listeningFor, triggerDrum, setKeyMap, setListeningFor]);
+
+  useEffect(() => () => {
+    Object.values(activeTimersRef.current).forEach(clearTimeout);
+  }, []);
 
   // Restore the original keyboard mapping.
   function resetDefaults() {
+    pausePractice();
     setKeyMap(DEFAULT_KEY_MAP);
     setListeningFor(null);
   }
 
   // Remove every mapping.
   function clearAllMappings() {
+    pausePractice();
     setKeyMap(Object.fromEntries(Object.keys(DEFAULT_KEY_MAP).map((key) => [key, ""])));
     setListeningFor(null);
   }
@@ -832,7 +801,7 @@ export default function DrumsetLayoutApp() {
                 item={item}
                 value={keyMap[item.id]}
                 isListening={listeningFor === item.id}
-                onStartRemap={setListeningFor}
+                onStartRemap={(id) => { pausePractice(); setListeningFor(id); }}
                 onTrigger={triggerDrum}
               />
             ))}
